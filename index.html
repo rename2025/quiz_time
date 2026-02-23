@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="manifest" href="{% static 'manifest.json' %}">
+    <script src="https://cdn.jsdelivr.net/npm/js-confetti@latest/dist/js-confetti.browser.js"></script>
+</head>
+<body>
+<div class="container mt-5">
+    <div class="progress mb-4" id="progress">
+        <div class="progress-bar" style="width: 0%"></div>
+    </div>
+    <div id="question-container">
+        <h3 id="question-text"></h3>
+        <div id="timer" class="alert alert-warning">30s</div>
+        <div class="form-check" id="answers"></div>
+    </div>
+    <button class="btn btn-primary mt-3" id="next-btn" disabled>Next</button>
+</div>
+
+<script>
+let currentQ = 0, questions = [], score = 0, total = 0;
+const timePerQ = 30;
+let timer;
+
+fetch(`/api/quizzes/{{ category.id }}/`).then(r => r.json()).then(data => {
+    questions = data; total = data.length; loadQuestion();
+});
+
+function loadQuestion() {
+    if (currentQ >= total) submitQuiz(); return;
+    const q = questions[currentQ];
+    document.getElementById('question-text').innerHTML = q.text;
+    const answersDiv = document.getElementById('answers');
+    answersDiv.innerHTML = '';
+    q.answers.forEach(ans => {
+        const div = document.createElement('div');
+        div.className = 'form-check';
+        div.innerHTML = `<input class="form-check-input" type="radio" name="ans" id="a${ans.id}" value="${ans.id}" aria-label="${ans.text}">
+                         <label class="form-check-label" for="a${ans.id}">${ans.text}</label>`;
+        answersDiv.appendChild(div);
+    });
+    document.querySelectorAll('input[name="ans"]').forEach(el => el.onclick = () => document.getElementById('next-btn').disabled = false);
+    startTimer();
+}
+
+function startTimer() {
+    let timeLeft = timePerQ;
+    document.getElementById('timer').textContent = `${timeLeft}s`;
+    timer = setInterval(() => {
+        timeLeft--;
+        document.getElementById('timer').textContent = `${timeLeft}s`;
+        if (timeLeft <= 0) {
+            clearInterval(timer);
+            nextQuestion();
+        }
+    }, 1000);
+}
+
+document.getElementById('next-btn').onclick = nextQuestion;
+function nextQuestion() {
+    clearInterval(timer);
+    const selected = document.querySelector('input[name="ans"]:checked');
+    if (selected) {
+        // Store answer, check correct async later
+    }
+    currentQ++;
+    document.getElementById('progress').querySelector('.progress-bar').style.width = `${(currentQ/total)*100}%`;
+    loadQuestion();
+}
+
+function submitQuiz() {
+    // POST to /api/quizzes/{{ category.id }}/submit/
+    fetch(`/api/quizzes/{{ category.id }}/submit/`, {method: 'POST', body: JSON.stringify({answers: answersMap}), headers: {'X-CSRFToken': getCookie('csrftoken')}})
+    .then(r => r.json()).then(data => {
+        if (data.percentage === 100) new JSConfetti().addConfetti();
+        // Show results
+    });
+}
+</script>
+</body>
+</html>
