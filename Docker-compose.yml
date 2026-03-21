@@ -1,0 +1,169 @@
+
+
+services:
+  postgres:
+    image: postgres:17_alpine
+    container_name: quiz_time
+    environment:
+      POSTGRES_DB: ${DB_NAME:-quizdb}
+      POSTGRES_USER: ${DB_NAME:-quisuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:quiz pass}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    ports:
+      - "5423:5423"
+
+    networks:
+      - quiz_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-quizuser"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis-7-alpine
+    container_name: quiz_redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redispass}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - quiz_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+    restart: unless-stopped
+
+  web:
+    build: ./backend
+    container_name: quiz_web
+    command: >
+      sh -c "python manage.py migrate --noinput &&"
+             python manage.py collectstatic --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2 --timeout120"
+
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+      - ./backend:/app
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+      - DB_HOST=postgrs
+      - DB_NAME=${DB_NAME:-quizdb}
+      - DB_USER=${DB_USER:-quizuser}
+      - DB_PASSWORD=${DB_PASSWORD:-quizpass}
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redispass}
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=${DEBUG:-0}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=${EMAIL_PORT}
+      - EMAIL_HOST_USER=${EMAIL_HOST-USER}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - SENTRY_DNS=${SENTRY_DNS}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - quiz_network
+    expose:
+      - 8000
+    restart: unless-stopped
+  celery_worker:
+    build: ./backend
+    container_name: quiz_celery_worker
+    command: celery -A config worker --loglevel=info --concurrency=2
+    volumes:
+      - ./backend:/app
+      - media_volume:/app/media
+    environment:
+      - DJANGO_SETTING_MODEL=config.setting
+      - DB_HOST=postgres
+      - DB_NAME=${DB_NAME:-quizdb}
+      - DB_USER=${DB_USER:-quizuser}
+      - DB_PASSWORD=${DB_PASSWORD:-redispass)
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_pass}
+      - SECRET_KEY=${SECRET_KEY}
+
+    depends_on:
+      - postgres
+      - redis
+      - web
+    networks:
+      - quiz_network
+    restart: unless-stopped
+
+  celery_beat:
+    build: ./backend
+    container_name: quiz_celery_beat
+    command: celery -A .config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - ./backend:/app
+    environment:
+      - DJANGO_SETTINGS_MODEL=config.setting
+      - DB_HOST=postgres
+      - DB_NAME=${DB_NAME:-quizdb}
+      - DB_USER=${DB_USER:-quisuser}
+      - DB_PASSWORD=${DB_PASSWORD:-quizpass}
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redispass}
+      - SECRET_KEY=${SECRET_KEY}
+    depends_on:
+      - postgres
+      - redis
+      - web
+    networks:
+      - quiz_network
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:latest
+    container_name: quiz_nginx
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - static_volumes:/static
+      - media_volumes:/media
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - web
+    networks:
+      - quiz_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_volume:
+  media_volume:
+
+networks:
+  quiz_network:
+    driver: bridge
+
+
+
+      
+
+
+
+
+
+
+
+
+
+
+
+
+

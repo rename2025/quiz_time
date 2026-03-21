@@ -19,7 +19,7 @@ class Category(models.Model):
 
 class Question(models.Model):
     text = models.TextField()
-    category = models.ForeignKey(Category, no_delete=models. CASCADE, related_name='questions')
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='questions')
     time_limit = models.IntegerField(default=30)
     points = models.IntegerField(default=30)
     order = models.IntegerField(default=10)
