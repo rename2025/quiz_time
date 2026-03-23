@@ -1,33 +1,32 @@
-
+version: '3.8'
 
 services:
   postgres:
-    image: postgres:17_alpine
-    container_name: quiz_time
+    image: postgres:16-alpine
+    container_name: quiz_postgres
     environment:
       POSTGRES_DB: ${DB_NAME:-quizdb}
-      POSTGRES_USER: ${DB_NAME:-quisuser}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:quiz pass}
+      POSTGRES_USER: ${DB_USER:-quizuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-quizpass123}
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backups:/backups
     ports:
-      - "5423:5423"
-
+      - "5432:5432"
     networks:
       - quiz_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-quizuser"]
+      test: ["CMD-SHELL", "pg_is ready -U ${DB_USER:-quizuser}"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
 
   redis:
-    image: redis-7-alpine
+    image: redis:7-alpine
     container_name: quiz_redis
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redispass}
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redispass123}
     volumes:
       - redis_data:/data
     ports:
@@ -38,35 +37,35 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   web:
     build: ./backend
     container_name: quiz_web
     command: >
-      sh -c "python manage.py migrate --noinput &&"
-             python manage.py collectstatic --noinput &&
-             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2 --timeout120"
-
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collect static --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2 --timeout 120"
     volumes:
       - static_volume:/app/staticfiles
       - media_volume:/app/media
       - ./backend:/app
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings
-      - DB_HOST=postgrs
+      - DB_HOST=postgres
       - DB_NAME=${DB_NAME:-quizdb}
       - DB_USER=${DB_USER:-quizuser}
-      - DB_PASSWORD=${DB_PASSWORD:-quizpass}
+      - DB_PASSWORD=${DB_PASSWORD:-quizpass123}
       - REDIS_HOST=redis
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-redispass}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redispass123}
       - SECRET_KEY=${SECRET_KEY}
       - DEBUG=${DEBUG:-0}
       - EMAIL_HOST=${EMAIL_HOST}
       - EMAIL_PORT=${EMAIL_PORT}
-      - EMAIL_HOST_USER=${EMAIL_HOST-USER}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
       - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
-      - SENTRY_DNS=${SENTRY_DNS}
+      - SENTRY_DSN=${SENTRY_DSN}
     depends_on:
       postgres:
         condition: service_healthy
@@ -77,6 +76,7 @@ services:
     expose:
       - 8000
     restart: unless-stopped
+
   celery_worker:
     build: ./backend
     container_name: quiz_celery_worker
@@ -85,15 +85,14 @@ services:
       - ./backend:/app
       - media_volume:/app/media
     environment:
-      - DJANGO_SETTING_MODEL=config.setting
+      - DJANGO_SETTINGS_MODULE=config.settings
       - DB_HOST=postgres
       - DB_NAME=${DB_NAME:-quizdb}
       - DB_USER=${DB_USER:-quizuser}
-      - DB_PASSWORD=${DB_PASSWORD:-redispass)
+      - DB_PASSWORD=${DB_PASSWORD:-quizpass123}
       - REDIS_HOST=redis
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_pass}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redispass123}
       - SECRET_KEY=${SECRET_KEY}
-
     depends_on:
       - postgres
       - redis
@@ -105,17 +104,17 @@ services:
   celery_beat:
     build: ./backend
     container_name: quiz_celery_beat
-    command: celery -A .config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    command: celery -A config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     volumes:
       - ./backend:/app
     environment:
-      - DJANGO_SETTINGS_MODEL=config.setting
+      - DJANGO_SETTINGS_MODULE=config.settings
       - DB_HOST=postgres
       - DB_NAME=${DB_NAME:-quizdb}
-      - DB_USER=${DB_USER:-quisuser}
-      - DB_PASSWORD=${DB_PASSWORD:-quizpass}
+      - DB_USER=${DB_USER:-quizuser}
+      - DB_PASSWORD=${DB_PASSWORD:-quizpass123}
       - REDIS_HOST=redis
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-redispass}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redispass123}
       - SECRET_KEY=${SECRET_KEY}
     depends_on:
       - postgres
@@ -130,8 +129,8 @@ services:
     container_name: quiz_nginx
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf
-      - static_volumes:/static
-      - media_volumes:/media
+      - static_volume:/static
+      - media_volume:/media
     ports:
       - "80:80"
       - "443:443"
@@ -150,20 +149,3 @@ volumes:
 networks:
   quiz_network:
     driver: bridge
-
-
-
-      
-
-
-
-
-
-
-
-
-
-
-
-
-
